@@ -89,20 +89,6 @@ end_time = time.time()
 # =========================
 results.sort(key=lambda x: x[0])
 
-
-# =========================
-# BEST SOLUTION
-# =========================
-best = results[0]
-
-print("\n===== BEST CONFIGURATION =====")
-print(f"Thrust (N):        {best[1]:.2f}")
-print(f"Burn time (s):     {best[2]:.2f}")
-print(f"Predicted apogee:  {best[3]:.2f} m")
-print(f"Rail exit velocity:{best[4]:.2f} m/s")
-print(f"Weighted % error:  {best[0]:.2f}%")
-
-
 # =========================
 # TOP 10
 # =========================
@@ -123,3 +109,15 @@ print("\n===== SEARCH TIME =====")
 print(f"Total time: {end_time - start_time:.2f} seconds")
 print(f"Weights -> Apogee: {W_APOGEE}, Velocity: {W_VELOCITY}")
 print(f"Max thrust constraint: {MAX_THRUST} N")
+
+# =========================
+# BEST SOLUTION
+# =========================
+best = results[0]
+
+print("\n===== BEST CONFIGURATION =====")
+print(f"Thrust (N):        {best[1]:.2f}")
+print(f"Burn time (s):     {best[2]:.2f}")
+print(f"Predicted apogee:  {best[3]:.2f} m")
+print(f"Rail exit velocity:{best[4]:.2f} m/s")
+print(f"Weighted % error:  {best[0]:.2f}%")
