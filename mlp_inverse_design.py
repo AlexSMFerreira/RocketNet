@@ -14,15 +14,16 @@ scaler_y = joblib.load("scaler_y.pkl")
 # =========================
 # TARGETS
 # =========================
-TARGET_APOGEE = 9000
-TARGET_VELOCITY = 35
+TARGET_APOGEE = 9300
+TARGET_VELOCITY = 33
 
 
 # =========================
-# WEIGHTS (NEW)
+# WEIGHTS
 # =========================
-W_APOGEE = 0.5
-W_VELOCITY = 0.5
+W_APOGEE = 0.25
+W_VELOCITY = 0.50
+W_THRUST = 0.25
 
 
 # =========================
@@ -37,6 +38,7 @@ MOTOR_MASS = 20.0
 # =========================
 MIN_THRUST = 2000
 MAX_THRUST = 4000
+
 MIN_BURN = 1.5
 MAX_BURN = 20.0
 
@@ -70,15 +72,44 @@ for thrust in thrust_range:
         # =========================
         # PERCENTAGE ERRORS
         # =========================
-        apogee_error = abs(apogee - TARGET_APOGEE) / TARGET_APOGEE * 100
-        velocity_error = abs(velocity - TARGET_VELOCITY) / TARGET_VELOCITY * 100
+        apogee_error = (
+            abs(apogee - TARGET_APOGEE)
+            / TARGET_APOGEE
+            * 100
+        )
+
+        velocity_error = (
+            abs(velocity - TARGET_VELOCITY)
+            / TARGET_VELOCITY
+            * 100
+        )
 
         # =========================
-        # WEIGHTED OBJECTIVE (NEW)
+        # THRUST MINIMIZATION TERM
         # =========================
-        error = (W_APOGEE * apogee_error) + (W_VELOCITY * velocity_error)
+        thrust_penalty = (
+            thrust / MAX_THRUST
+        ) * 100
 
-        results.append((error, thrust, burn, apogee, velocity))
+        # =========================
+        # FINAL MULTI-OBJECTIVE SCORE
+        # =========================
+        error = (
+            (W_APOGEE * apogee_error)
+            + (W_VELOCITY * velocity_error)
+            + (W_THRUST * thrust_penalty)
+        )
+
+        results.append((
+            error,
+            thrust,
+            burn,
+            apogee,
+            velocity,
+            apogee_error,
+            velocity_error,
+            thrust_penalty
+        ))
 
 
 end_time = time.time()
@@ -89,17 +120,38 @@ end_time = time.time()
 # =========================
 results.sort(key=lambda x: x[0])
 
+
 # =========================
 # TOP 10
 # =========================
 print("\n===== TOP 10 SOLUTIONS =====")
 
 for i in range(10):
-    e, t, b, a, v = results[i]
+
+    (
+        e,
+        t,
+        b,
+        a,
+        v,
+        ae,
+        ve,
+        tp
+    ) = results[i]
+
     print(f"\n#{i+1}")
-    print(f"Thrust: {t:.1f} N | Burn: {b:.2f} s")
-    print(f"Apogee: {a:.1f} m | Velocity: {v:.2f} m/s")
-    print(f"Weighted % error: {e:.2f}%")
+    print(f"Thrust: {t:.1f} N")
+    print(f"Burn: {b:.2f} s")
+
+    print(f"Apogee: {a:.1f} m")
+    print(f"Velocity: {v:.2f} m/s")
+
+    print(f"Apogee Error: {ae:.2f}%")
+    print(f"Velocity Error: {ve:.2f}%")
+
+    print(f"Thrust Penalty: {tp:.2f}%")
+
+    print(f"Final Score: {e:.2f}")
 
 
 # =========================
@@ -107,8 +159,16 @@ for i in range(10):
 # =========================
 print("\n===== SEARCH TIME =====")
 print(f"Total time: {end_time - start_time:.2f} seconds")
-print(f"Weights -> Apogee: {W_APOGEE}, Velocity: {W_VELOCITY}")
+
+print(
+    f"Weights -> "
+    f"Apogee: {W_APOGEE}, "
+    f"Velocity: {W_VELOCITY}, "
+    f"Thrust: {W_THRUST}"
+)
+
 print(f"Max thrust constraint: {MAX_THRUST} N")
+
 
 # =========================
 # BEST SOLUTION
@@ -116,8 +176,11 @@ print(f"Max thrust constraint: {MAX_THRUST} N")
 best = results[0]
 
 print("\n===== BEST CONFIGURATION =====")
-print(f"Thrust (N):        {best[1]:.2f}")
-print(f"Burn time (s):     {best[2]:.2f}")
-print(f"Predicted apogee:  {best[3]:.2f} m")
-print(f"Rail exit velocity:{best[4]:.2f} m/s")
-print(f"Weighted % error:  {best[0]:.2f}%")
+
+print(f"Thrust (N):         {best[1]:.2f}")
+print(f"Burn time (s):      {best[2]:.2f}")
+
+print(f"Predicted apogee:   {best[3]:.2f} m")
+print(f"Rail exit velocity: {best[4]:.2f} m/s")
+
+print(f"Final score:        {best[0]:.2f}")
