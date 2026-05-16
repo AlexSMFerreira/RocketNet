@@ -9,10 +9,10 @@ source .venv/bin/activate
 # MLP Neural Network
 ## Training
 ```
-python3 mlp_training.py
+python mlp_training.py
 ```
 
 ## Testing
 ```
-python3 mlp_predict.py
+python mlp_predict.py
 ```
