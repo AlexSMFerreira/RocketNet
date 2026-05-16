@@ -7,23 +7,18 @@ import time
 # LOAD MODEL + SCALERS
 # =========================
 model = load_model("mlp_rocket_surrogate.keras")
+
 scaler_X = joblib.load("scaler_X.pkl")
 scaler_y = joblib.load("scaler_y.pkl")
 
 
 # =========================
-# TARGETS
+# TARGET RANGES
 # =========================
-TARGET_APOGEE = 9300
-TARGET_VELOCITY = 33
+MIN_APOGEE = 9800
+MAX_APOGEE = 10000
 
-
-# =========================
-# WEIGHTS
-# =========================
-W_APOGEE = 0.25
-W_VELOCITY = 0.50
-W_THRUST = 0.25
+MIN_VELOCITY = 30
 
 
 # =========================
@@ -39,7 +34,7 @@ MOTOR_MASS = 20.0
 MIN_THRUST = 2000
 MAX_THRUST = 4000
 
-MIN_BURN = 1.5
+MIN_BURN = 1.0
 MAX_BURN = 20.0
 
 
@@ -49,7 +44,7 @@ MAX_BURN = 20.0
 thrust_range = np.linspace(MIN_THRUST, MAX_THRUST, 80)
 burn_range = np.linspace(MIN_BURN, MAX_BURN, 80)
 
-results = []
+valid_results = []
 
 start_time = time.time()
 
@@ -60,56 +55,45 @@ start_time = time.time()
 for thrust in thrust_range:
     for burn in burn_range:
 
-        X = np.array([[burn, thrust, EMPTY_MASS, MOTOR_MASS]])
+        X = np.array([
+            [burn, thrust, EMPTY_MASS, MOTOR_MASS]
+        ])
+
         X_scaled = scaler_X.transform(X)
 
-        y_scaled = model(X_scaled)
+        # FAST INFERENCE
+        y_scaled = model(X_scaled, training=False)
+
         y = scaler_y.inverse_transform(y_scaled)
 
         apogee = y[0, 0]
         velocity = y[0, 1]
 
         # =========================
-        # PERCENTAGE ERRORS
+        # RANGE FILTER
         # =========================
-        apogee_error = (
-            abs(apogee - TARGET_APOGEE)
-            / TARGET_APOGEE
-            * 100
-        )
+        if (
+            MIN_APOGEE <= apogee <= MAX_APOGEE
+            and velocity >= MIN_VELOCITY
+        ):
 
-        velocity_error = (
-            abs(velocity - TARGET_VELOCITY)
-            / TARGET_VELOCITY
-            * 100
-        )
+            # =========================
+            # RANKING SCORE
+            # LOWER = BETTER
+            # =========================
 
-        # =========================
-        # THRUST MINIMIZATION TERM
-        # =========================
-        thrust_penalty = (
-            thrust / MAX_THRUST
-        ) * 100
+            # Prefer:
+            # - higher velocity
+            
+            score = MIN_VELOCITY - velocity
 
-        # =========================
-        # FINAL MULTI-OBJECTIVE SCORE
-        # =========================
-        error = (
-            (W_APOGEE * apogee_error)
-            + (W_VELOCITY * velocity_error)
-            + (W_THRUST * thrust_penalty)
-        )
-
-        results.append((
-            error,
-            thrust,
-            burn,
-            apogee,
-            velocity,
-            apogee_error,
-            velocity_error,
-            thrust_penalty
-        ))
+            valid_results.append((
+                score,
+                thrust,
+                burn,
+                apogee,
+                velocity
+            ))
 
 
 end_time = time.time()
@@ -118,69 +102,102 @@ end_time = time.time()
 # =========================
 # SORT RESULTS
 # =========================
-results.sort(key=lambda x: x[0])
+valid_results.sort(key=lambda x: x[0])
 
 
 # =========================
-# TOP 10
+# RESULTS
 # =========================
-print("\n===== TOP 10 SOLUTIONS =====")
+print("\n===== VALID CONFIGURATIONS =====")
 
-for i in range(10):
+if len(valid_results) == 0:
 
-    (
-        e,
-        t,
-        b,
-        a,
-        v,
-        ae,
-        ve,
-        tp
-    ) = results[i]
+    print("\nNo solutions found.")
 
-    print(f"\n#{i+1}")
-    print(f"Thrust: {t:.1f} N")
-    print(f"Burn: {b:.2f} s")
+else:
 
-    print(f"Apogee: {a:.1f} m")
-    print(f"Velocity: {v:.2f} m/s")
+    max_results = min(10, len(valid_results))
 
-    print(f"Apogee Error: {ae:.2f}%")
-    print(f"Velocity Error: {ve:.2f}%")
+    for i in range(max_results):
 
-    print(f"Thrust Penalty: {tp:.2f}%")
+        (
+            score,
+            thrust,
+            burn,
+            apogee,
+            velocity
+        ) = valid_results[i]
 
-    print(f"Final Score: {e:.2f}")
+        print(f"\n#{i+1}")
+
+        print(f"Thrust: {thrust:.1f} N")
+        print(f"Burn time: {burn:.2f} s")
+
+        print(f"Apogee: {apogee:.2f} m")
+        print(f"Rail Exit Velocity: {velocity:.2f} m/s")
+
+        print(f"Score: {score:.2f}")
 
 
 # =========================
-# TIME
+# TIMING
 # =========================
-print("\n===== SEARCH TIME =====")
-print(f"Total time: {end_time - start_time:.2f} seconds")
+total_time = end_time - start_time
 
-print(
-    f"Weights -> "
-    f"Apogee: {W_APOGEE}, "
-    f"Velocity: {W_VELOCITY}, "
-    f"Thrust: {W_THRUST}"
+num_predictions = (
+    len(thrust_range)
+    * len(burn_range)
 )
 
-print(f"Max thrust constraint: {MAX_THRUST} N")
+avg_time = total_time / num_predictions
+
+print("\n===== SEARCH TIME =====")
+
+print(f"Total time: {total_time:.2f} s")
+
+print(f"Predictions evaluated: {num_predictions}")
+
+print(f"Average inference time: {avg_time*1000:.3f} ms")
+
+
+# =========================
+# SUMMARY
+# =========================
+print("\n===== SEARCH CONSTRAINTS =====")
+
+print(
+    f"Apogee range: "
+    f"{MIN_APOGEE} - {MAX_APOGEE} m"
+)
+
+print(
+    f"Minimum velocity: "
+    f"{MIN_VELOCITY} m/s"
+)
+
+print(
+    f"Solutions found: "
+    f"{len(valid_results)}"
+)
 
 
 # =========================
 # BEST SOLUTION
 # =========================
-best = results[0]
+if len(valid_results) > 0:
 
-print("\n===== BEST CONFIGURATION =====")
+    best = valid_results[0]
 
-print(f"Thrust (N):         {best[1]:.2f}")
-print(f"Burn time (s):      {best[2]:.2f}")
+    print("\n===== BEST CONFIGURATION =====")
 
-print(f"Predicted apogee:   {best[3]:.2f} m")
-print(f"Rail exit velocity: {best[4]:.2f} m/s")
+    print(f"Thrust (N):         {best[1]:.2f}")
+    print(f"Burn time (s):      {best[2]:.2f}")
 
-print(f"Final score:        {best[0]:.2f}")
+    print(f"Predicted apogee:   {best[3]:.2f} m")
+    print(f"Rail exit velocity: {best[4]:.2f} m/s")
+
+    print(f"Score:              {best[0]:.2f}")
+
+else:
+
+    print("\nNo valid solution found.")
